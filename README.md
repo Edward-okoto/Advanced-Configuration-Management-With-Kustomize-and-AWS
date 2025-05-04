@@ -904,7 +904,7 @@ git push origin main
 ---
 
 git add .
-git commit -m "Automate EKS provisioning"
+git commit -m "EKS,kustomize,docker"
 git push 
 
 
