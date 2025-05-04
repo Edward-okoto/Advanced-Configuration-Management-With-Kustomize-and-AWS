@@ -43,13 +43,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
+      - name: Ensure Dockerfile Exists
+        run: |
+          if [ ! -f Dockerfile ]; then echo "❌ Error: Dockerfile is missing!"; exit 1; fi
+
+      - name: Create Buildx Instance
+        run: |
+          docker buildx create --use
+
       - name: Log in to Docker Hub (Using Access Token)
         run: |
           echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
       - name: Build and Push Docker Image to Docker Hub
         run: |
-          docker buildx create --use
+          mkdir -p /tmp/.buildx-cache
           docker buildx build --push --tag edwardokoto1/nginx:latest \
             --cache-from=type=local,src=/tmp/.buildx-cache \
             --cache-to=type=local,dest=/tmp/.buildx-cache .
