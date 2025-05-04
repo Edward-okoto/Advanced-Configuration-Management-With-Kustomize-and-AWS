@@ -51,24 +51,28 @@ jobs:
         run: |
           docker buildx create --use
 
-      - name: Log in to Docker Hub (Using Access Token)
+      - name: Log in to Docker Hub (Check for Valid Credentials)
         run: |
-          echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin || { echo "❌ Docker login failed. Check token permissions."; exit 1; }
 
-      - name: Build and Push Docker Image to Docker Hub
+      - name: Build and Push Docker Image to Docker Hub (Fix Cache Issue)
         run: |
           mkdir -p /tmp/.buildx-cache
           docker buildx build --push --tag edwardokoto1/nginx:latest \
             --cache-from=type=local,src=/tmp/.buildx-cache \
-            --cache-to=type=local,dest=/tmp/.buildx-cache .
+            --cache-to=type=local,dest=/tmp/.buildx-cache . || { echo "❌ Docker build failed"; exit 1; }
 
-      - name: Install Kubectl & Kustomize (Fixed Kubectl Download)
+      - name: Install Kubectl & Kustomize (Ensure Correct Install)
         run: |
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" || { echo "❌ Kubectl download failed"; exit 1; }
           chmod +x kubectl && mv kubectl /usr/local/bin/
-          curl -LO "https://github.com/kubernetes-sigs/kustomize/releases/latest/download/kustomize_linux_amd64.tar.gz"
+          curl -LO "https://github.com/kubernetes-sigs/kustomize/releases/latest/download/kustomize_linux_amd64.tar.gz" || { echo "❌ Kustomize download failed"; exit 1; }
           tar -xzf kustomize_linux_amd64.tar.gz && chmod +x kustomize && mv kustomize /usr/local/bin/
 
-      - name: Apply Kustomize Overlay
+      - name: Apply Kustomize Overlay (Improved Error Handling)
         run: |
-          kubectl apply -k overlays/dev/
+          kubectl apply -k overlays/dev/ || { echo "❌ Kubernetes deployment failed"; exit 1; }
+
+      - name: Verify Kubernetes Deployment
+        run: |
+          kubectl get pods -n default
