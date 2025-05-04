@@ -903,6 +903,9 @@ git push origin main
 
 ---
 
+git add .
+git commit -m "Automate EKS provisioning"
+git push 
 
 
 
