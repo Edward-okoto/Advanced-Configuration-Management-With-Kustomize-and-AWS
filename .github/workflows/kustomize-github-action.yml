@@ -9,7 +9,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write  # Required for AWS OIDC authentication
+      id-token: write
       contents: read
 
     steps:
@@ -35,9 +35,28 @@ jobs:
         run: |
           aws eks --region ${{ secrets.AWS_REGION }} update-kubeconfig --name nginx-cluster
 
-      - name: Set Up Kubectl & Kustomize
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Log in to Docker Hub
         run: |
-          curl -LO "https://dl.k8s.io/release/stable/bin/linux/amd64/kubectl"
+          echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Build and Push Docker Image to Docker Hub
+        run: |
+          docker buildx create --use
+          docker buildx build --push --tag edwardokoto1/nginx:latest \
+            --cache-from=type=local,src=/tmp/.buildx-cache \
+            --cache-to=type=local,dest=/tmp/.buildx-cache .
+
+      - name: Install Kubectl & Kustomize (Fixed Kubectl Download)
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
           chmod +x kubectl && mv kubectl /usr/local/bin/
           curl -LO "https://github.com/kubernetes-sigs/kustomize/releases/latest/download/kustomize_linux_amd64.tar.gz"
           tar -xzf kustomize_linux_amd64.tar.gz && chmod +x kustomize && mv kustomize /usr/local/bin/

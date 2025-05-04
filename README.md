@@ -819,18 +819,15 @@ nodeGroups:
 Update CI/CD automation inside `.github/workflows/kustomize-github-action.yml`:
 
 ```yaml
-name: Create EKS Cluster with GitHub Actions
+name: Deploy with Kustomize & EKS
 
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
 jobs:
-  create-eks:
+  deploy:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -853,11 +850,41 @@ jobs:
 
       - name: Create EKS Cluster
         run: |
-          eksctl create cluster -f infra/eks-cluster.yaml
+          eksctl create cluster --name nginx-cluster --region ${{ secrets.AWS_REGION }} --nodegroup-name workers --nodes 2 --managed
 
       - name: Update Kubeconfig
         run: |
           aws eks --region ${{ secrets.AWS_REGION }} update-kubeconfig --name nginx-cluster
+
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Log in to Docker Hub
+        run: |
+          echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Build and Push Docker Image to Docker Hub
+        run: |
+          docker buildx create --use
+          docker buildx build --push --tag edwardokoto1/nginx:latest \
+            --cache-from=type=local,src=/tmp/.buildx-cache \
+            --cache-to=type=local,dest=/tmp/.buildx-cache .
+
+      - name: Install Kubectl & Kustomize (Fixed Kubectl Download)
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl && mv kubectl /usr/local/bin/
+          curl -LO "https://github.com/kubernetes-sigs/kustomize/releases/latest/download/kustomize_linux_amd64.tar.gz"
+          tar -xzf kustomize_linux_amd64.tar.gz && chmod +x kustomize && mv kustomize /usr/local/bin/
+
+      - name: Apply Kustomize Overlay
+        run: |
+          kubectl apply -k overlays/dev/
 ```
 
 ---
@@ -870,6 +897,9 @@ git commit -m "Automate EKS provisioning with GitHub Actions"
 git push origin main
 ```
 ✔ **This will automatically trigger the workflow**, provisioning the EKS cluster!
+
+![](./img/k27.png)
+![](./img/k26.png)
 
 ---
 
